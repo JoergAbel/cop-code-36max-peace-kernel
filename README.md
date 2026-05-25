@@ -1,29 +1,79 @@
-# cop-code-36max-peace-kernel
-Modular Python prototype for dignity-first AI de-escalation (COP CODE / 36 MAX
-# COP CODE / 36 MAX AI Peace Kernel v3.1
+# COP CODE / 36 MAX AI Peace Kernel
 
-A modular Python prototype for a **dignity-first, truth-preserving de-escalation layer** for artificial intelligence.
+**Version:** v3.6  
+**Status:** Conceptual Python prototype / tested smoke-test release
 
-### Core Idea
-"Würde zuerst — aber nie auf Kosten von Wahrheit und Gerechtigkeit."  
-(Dignity first — but never at the expense of truth and justice.)
+A modular Python prototype for a dignity-first, truth-preserving de-escalation layer for artificial intelligence.
 
-Born from the real 36 MAX event (the 36-minute reanimation of Maximilian Abel in 2023) as a symbol for a second chance through coordinated action.
+The kernel is designed as a review and safety layer for conflict-related AI outputs. It does not replace an LLM, a court, a mediator, diplomacy or human judgement. It makes escalation patterns, humiliation risks, truth conflicts and acceptance gaps visible before a system generates or executes conflict-related responses.
 
-### Key Features
-- Hybrid Intent Analysis (Regex + Semantic fallback)
-- Peace Compass – structured evaluation of peace/conflict proposals
-- Plausibility Review to detect extreme or suspicious inputs
-- 36 MAX Emergency Protocol
-- Strong emphasis on human review and clear limitations
+---
 
-### Important Limitations
-This system **does not decide conflicts**. It does not replace courts, diplomacy, mediation or human judgement.  
-It makes escalation patterns, humiliation risks and acceptance gaps visible.
+## Core Principle
 
-### Installation
+> Dignity first — but never at the expense of truth, responsibility or justice.
 
-```bash
-git clone https://github.com/YOURUSERNAME/cop-code-36max-peace-kernel.git
-cd cop-code-36max-peace-kernel
-python cop_code_36max_kernel.py
+The COP CODE / 36 MAX Peace Kernel is based on the refusal to convert trauma into retaliation.
+
+It was inspired by the real 36 MAX event: the 36-minute reanimation of Maximilian Abel in 2023. In this framework, 36 MAX stands as a human symbol for a second chance through coordinated action under extreme pressure.
+
+Instead of turning trauma into revenge, blame escalation or destructive litigation logic, the kernel translates the experience into a structured peace and de-escalation tool.
+
+---
+
+## What This Kernel Does
+
+The kernel analyzes conflict-related input and produces structured review signals.
+
+It can detect:
+
+- Retaliation loops
+- External blame loops
+- Fake peace / truth suppression
+- Humiliation risk
+- Dehumanizing language
+- Identity threat
+- Extreme or suspicious scoring patterns
+- Mathematical peace deadlocks
+- Emotional intensity that should not be over-blocked
+
+It then returns structured outputs such as:
+
+- `IntentAudit`
+- `ConscienceMirror`
+- `NuanceReview`
+- `TruthDignityReview`
+- `PlausibilityReview`
+- `PrePeaceStabilization`
+- `PeaceCompassResult`
+
+---
+
+## Key Features
+
+### 1. Hybrid Intent Analysis
+
+The kernel combines:
+
+- `RegexIntentAnalyzer` for transparent pattern detection
+- `PhraseHeuristicAnalyzer` for indirect escalation phrases
+- `SemanticIntentAnalyzer` as an optional interface for a future LLM, embedding model or classifier
+- `HybridIntentAnalyzer` to rank all signals by danger level, confidence and source priority
+
+### 2. Peace Compass
+
+The Peace Compass evaluates peace or conflict proposals through the factors:
+
+- `W` = Dignity
+- `S` = Safety
+- `T` = Truth / Recognition
+- `G` = Face-saving
+- `F` = Fairness / Justice
+- `Z` = Future viability
+- `V` = Trust / Verification
+- `H` = Humiliation risk
+
+Default formula:
+
+```text
+P_peace = min(P1, P2) * (1 - abs(P1 - P2))
