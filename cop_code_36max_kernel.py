@@ -1,6 +1,6 @@
 """
-COP CODE / 36 MAX AI Peace Kernel v3.1
-====================================
+COP CODE / 36 MAX AI Peace Kernel v3.6
+======================================
 
 A modular prototype for a dignity-first, truth-preserving de-escalation layer
 for artificial intelligence.
@@ -28,27 +28,6 @@ The COP CODE:
 The Peace Compass:
     A structured evaluation method for peace proposals based on dignity, safety,
     truth, face-saving, fairness, future viability, trust/control and humiliation risk.
-
-Version 3.1 additions
----------------------
-1. Modular intent analysis:
-   - RegexIntentAnalyzer for transparent baseline detection.
-   - SemanticIntentAnalyzer interface for future LLM or embedding-based analysis.
-   - HybridIntentAnalyzer combines both layers without requiring an external model.
-
-2. Plausibility review:
-   - Detects suspiciously extreme, flat or self-serving assessments.
-   - Flags PLAUSIBILITY_REVIEW_REQUIRED instead of accusing bad faith.
-
-3. Calibration notice:
-   - States clearly that the Peace Compass is a heuristic prototype, not a validated
-     predictive model.
-
-4. GitHub-ready framing:
-   - Human review required.
-   - No replacement for courts, diplomacy, mediation or historical responsibility.
-   - Short technical manifesto in code.
-   - Longer origin story separated for README or public explanation.
 
 Important limitation
 --------------------
@@ -84,6 +63,7 @@ class DangerLevel(str, Enum):
 
 class IntentProfile(str, Enum):
     CONSTRUCTIVE = "CONSTRUCTIVE"
+    EXPRESSIVE_INTENSITY = "EXPRESSIVE_INTENSITY"
     RETALIATION_LOOP = "RETALIATION_LOOP"
     EXTERNAL_BLAME_LOOP = "EXTERNAL_BLAME_LOOP"
     FAKED_PEACE = "FAKED_PEACE"
@@ -96,8 +76,17 @@ class IntentProfile(str, Enum):
 
 class ReviewSignal(str, Enum):
     OK = "OK"
+    NUANCE_REVIEW_REQUIRED = "NUANCE_REVIEW_REQUIRED"
     PLAUSIBILITY_REVIEW_REQUIRED = "PLAUSIBILITY_REVIEW_REQUIRED"
+    PRE_PEACE_STABILIZATION_REQUIRED = "PRE_PEACE_STABILIZATION_REQUIRED"
     HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
+
+
+class PeaceFormulaMode(str, Enum):
+    STRICT_BALANCE = "strict_balance"
+    MINIMUM_ONLY = "minimum_only"
+    WEIGHTED_BALANCE = "weighted_balance"
+    AVERAGE_REFERENCE = "average_reference"
 
 
 POSITIVE_FACTORS = ["W", "S", "T", "G", "F", "Z", "V"]
@@ -118,6 +107,24 @@ CALIBRATION_NOTICE = (
     "prediction. It should be used to structure human review, compare proposals and "
     "identify risks, not to decide conflicts automatically."
 )
+
+FORMULA_NOTES = {
+    PeaceFormulaMode.STRICT_BALANCE: (
+        "Default Peace Compass formula: min(P1, P2) * (1 - abs(P1 - P2)). "
+        "It prioritizes the weakest acceptance and penalizes asymmetry."
+    ),
+    PeaceFormulaMode.MINIMUM_ONLY: (
+        "Uses only min(P1, P2). It focuses entirely on the weakest side and does not separately penalize asymmetry."
+    ),
+    PeaceFormulaMode.WEIGHTED_BALANCE: (
+        "A softer balance formula: min(P1, P2) * (1 - 0.5 * abs(P1 - P2)). "
+        "It still penalizes asymmetry, but less strongly."
+    ),
+    PeaceFormulaMode.AVERAGE_REFERENCE: (
+        "Comparison formula: average(P1, P2) * (1 - abs(P1 - P2)). "
+        "It is less strict about the weakest party and should not be used as default for COP CODE."
+    ),
+}
 
 
 # =============================================================================
@@ -191,7 +198,9 @@ class PartyAssessment:
         H value from 0.0 to 1.0. Higher means more dangerous.
 
     weights:
-        Optional weights for up to three factors. Recommended range: 1.0 to 1.5.
+        Optional priority weights for up to three factors. Recommended range: 1.0 to 1.5.
+        Values below 1.0 are normalized to 1.0. This system allows priority boosts,
+        but does not allow factors to be de-weighted below the baseline.
     """
 
     name: str
@@ -208,6 +217,41 @@ class IntentAudit:
     matched_terms: List[str] = field(default_factory=list)
     source: str = "regex"
     confidence: float = 0.5
+
+
+@dataclass
+class ConscienceMirror:
+    party_name: str
+    profile: IntentProfile
+    danger_level: DangerLevel
+    message: str
+    recommended_action: str
+    requires_36max: bool
+    localization_key: str
+
+
+@dataclass
+class NuanceReview:
+    signal: ReviewSignal
+    expressive_intensity: float
+    escalation_present: bool
+    issue: str
+
+
+@dataclass
+class TruthDignityReview:
+    truth_is_painful: bool
+    needless_humiliation_detected: bool
+    suggested_bridge: str
+    semantic_code: str
+    localization_key: str
+
+
+@dataclass
+class PrePeaceStabilization:
+    required: bool
+    reason: str
+    steps: List[str]
 
 
 @dataclass
@@ -228,18 +272,24 @@ class PeaceCompassResult:
     weakest_party: str
     asymmetry: float
     stability_signal: str
+    formula_mode: PeaceFormulaMode
+    formula_note: str
     calibration_notice: str = CALIBRATION_NOTICE
 
 
 @dataclass
 class KernelOutput:
     system_status: str
+    system_statuses: List[str]
     origin_axiom: Dict[str, str]
     origin_manifesto: str
     origin_story: str
     intent_audits: Dict[str, Dict[str, Any]]
+    nuance_reviews: Dict[str, Dict[str, Any]]
+    truth_dignity_reviews: Dict[str, Dict[str, Any]]
     plausibility_reviews: Dict[str, Dict[str, Any]]
-    conscience_mirror: List[str]
+    pre_peace_stabilization: Dict[str, Any]
+    conscience_mirror: List[Dict[str, Any]]
     emergency_protocol: List[str]
     peace_compass: Dict[str, Any]
     recommendations: List[str]
@@ -254,6 +304,7 @@ class KernelOutput:
 class IntentAnalyzer(Protocol):
     def analyze(self, text: str) -> IntentAudit:
         """Return an IntentAudit for the given text."""
+        ...
 
 
 class RegexIntentAnalyzer:
@@ -282,10 +333,12 @@ class RegexIntentAnalyzer:
                 r"\balle verklagen\b", r"\bverantwortlichen vernichten\b",
             ],
             IntentProfile.FAKED_PEACE: [
-                r"\bsilence\b", r"\bsweep.*under.*rug\b",
-                r"\bdon't talk about it\b", r"\bignore it\b",
+                r"\bsilence\b", r"\bsilent\b", r"\bsweep.*under.*rug\b",
+                r"\bdon't talk about it\b", r"\bavoid talking about the facts\b",
+                r"\bavoid discussing the facts\b", r"\bignore it\b",
                 r"\bwhatever\b", r"\btotschweigen\b",
                 r"\bunter den teppich\b", r"\beinfach vergessen\b",
+                r"\bfakten nicht besprechen\b", r"\bnicht über die fakten sprechen\b",
             ],
             IntentProfile.HUMILIATION_RISK: [
                 r"\bcapitulation\b", r"\bsurrender\b", r"\btraitor\b",
@@ -294,8 +347,9 @@ class RegexIntentAnalyzer:
             ],
             IntentProfile.TRUTH_SUPPRESSION: [
                 r"\bhide the truth\b", r"\bdeny the facts\b",
-                r"\bcover up\b", r"\bwahrheit verschweigen\b",
-                r"\bfakten leugnen\b", r"\bvertuschen\b",
+                r"\bcover up\b", r"\bsuppress the facts\b",
+                r"\bwahrheit verschweigen\b", r"\bfakten leugnen\b",
+                r"\bfakten unterdrücken\b", r"\bvertuschen\b",
             ],
             IntentProfile.IDENTITY_THREAT: [
                 r"\bthey are not a real people\b", r"\bthey have no right to exist\b",
@@ -303,7 +357,9 @@ class RegexIntentAnalyzer:
             ],
             IntentProfile.DEHUMANIZATION: [
                 r"\banimals\b", r"\bvermin\b", r"\bparasites\b",
+                r"\bmonsters?\b", r"\bsubhuman\b",
                 r"\btiere\b", r"\bungeziefer\b", r"\bparasiten\b",
+                r"\bmonster\b", r"\buntermenschen\b", r"\bmenschenunwürdig\b",
             ],
         }
 
@@ -382,24 +438,101 @@ class RegexIntentAnalyzer:
         )
 
 
-class SemanticIntentAnalyzer:
+class NuanceGate:
     """
-    Optional semantic analyzer interface.
+    Separates expressive human language from actual escalation.
 
-    This class can be connected to:
-        - a local embedding model,
-        - an on-device classifier,
-        - or an LLM-based classification function.
-
-    The callable must accept a text string and return an IntentAudit.
-
-    If no classifier is provided, this analyzer performs a small transparent
-    heuristic check for indirect escalation phrases. It is intentionally modest:
-    real semantic classification should be added by the implementer.
+    Principle:
+        Emotional intensity is not escalation unless it contains humiliation,
+        revenge, dehumanization, truth suppression or identity threat.
     """
 
-    def __init__(self, classifier: Optional[Callable[[str], IntentAudit]] = None):
-        self.classifier = classifier
+    def __init__(self):
+        self.expressive_markers = [
+            "unbelievable", "heartbreaking", "devastating", "shocking", "unbearable",
+            "unglaublich", "herzzerreißend", "herzzerreissend", "erschütternd",
+            "schockierend", "unerträglich", "brutal", "heftig",
+        ]
+
+    def review(self, text: str, audit: IntentAudit) -> NuanceReview:
+        text_lc = text.lower()
+        hits = [marker for marker in self.expressive_markers if marker in text_lc]
+        expressive_intensity = min(1.0, len(hits) / 3.0)
+        escalation_present = audit.danger_level in [DangerLevel.HIGH, DangerLevel.MAXIMAL]
+
+        if expressive_intensity > 0 and not escalation_present:
+            return NuanceReview(
+                signal=ReviewSignal.NUANCE_REVIEW_REQUIRED,
+                expressive_intensity=round(expressive_intensity, 2),
+                escalation_present=False,
+                issue="Expressive or metaphorical language detected without clear escalation. Do not over-block.",
+            )
+
+        return NuanceReview(
+            signal=ReviewSignal.OK,
+            expressive_intensity=round(expressive_intensity, 2),
+            escalation_present=escalation_present,
+            issue="No nuance-based over-blocking risk detected.",
+        )
+
+
+class TruthDignityBridge:
+    """
+    Preserves hard truth while reducing needless humiliation.
+
+    Principle:
+        Truth may be painful. It must not be needlessly humiliating.
+    """
+
+    def review(self, text: str) -> TruthDignityReview:
+        text_lc = text.lower()
+        painful_truth_markers = [
+            "responsibility", "crime", "harm", "guilt", "failure",
+            "verantwortung", "verbrechen", "schuld", "fehler", "schaden",
+        ]
+        humiliation_markers = [
+            "monster", "monsters", "worthless", "no dignity", "should be humiliated",
+            "wertlos", "keine würde", "gedemütigt werden",
+        ]
+
+        truth_is_painful = any(marker in text_lc for marker in painful_truth_markers)
+        needless_humiliation = any(marker in text_lc for marker in humiliation_markers)
+
+        if truth_is_painful and needless_humiliation:
+            bridge = (
+                "Name the fact, harm and responsibility clearly, but remove language that denies human dignity."
+            )
+            semantic_code = "PAINFUL_TRUTH_WITH_NEEDLESS_HUMILIATION"
+            localization_key = "truth_dignity.painful_truth_with_needless_humiliation"
+        elif truth_is_painful:
+            bridge = (
+                "Preserve the hard fact. Use precise language that names responsibility without unnecessary degradation."
+            )
+            semantic_code = "PAINFUL_TRUTH_WITHOUT_NEEDLESS_HUMILIATION"
+            localization_key = "truth_dignity.painful_truth_without_needless_humiliation"
+        else:
+            bridge = "No truth-dignity conflict detected."
+            semantic_code = "NO_TRUTH_DIGNITY_CONFLICT"
+            localization_key = "truth_dignity.no_conflict"
+
+        return TruthDignityReview(
+            truth_is_painful=truth_is_painful,
+            needless_humiliation_detected=needless_humiliation,
+            suggested_bridge=bridge,
+            semantic_code=semantic_code,
+            localization_key=localization_key,
+        )
+
+
+class PhraseHeuristicAnalyzer:
+    """
+    Simple phrase-based analyzer for indirect escalation signals.
+
+    This is not a semantic model. It is deliberately named as a heuristic to avoid
+    overstating its capability. Use SemanticIntentAnalyzer for real model-based analysis.
+    """
+
+    def __init__(self):
         self.indirect_escalation_phrases = [
             "they must feel what they did",
             "there can be no compromise",
@@ -417,9 +550,6 @@ class SemanticIntentAnalyzer:
         ]
 
     def analyze(self, text: str) -> IntentAudit:
-        if self.classifier is not None:
-            return self.classifier(text)
-
         text_lc = text.lower()
         matches = [phrase for phrase in self.indirect_escalation_phrases if phrase in text_lc]
 
@@ -427,33 +557,69 @@ class SemanticIntentAnalyzer:
             return IntentAudit(
                 profile=IntentProfile.RETALIATION_LOOP,
                 danger_level=DangerLevel.HIGH,
-                issue="Indirect semantic escalation pattern detected.",
+                issue="Indirect phrase-based escalation pattern detected.",
                 matched_terms=matches,
-                source="semantic_heuristic",
-                confidence=0.6,
+                source="phrase_heuristic",
+                confidence=0.55,
             )
 
         return IntentAudit(
             profile=IntentProfile.CONSTRUCTIVE,
             danger_level=DangerLevel.LOW,
-            issue="No semantic escalation pattern detected by fallback heuristic.",
+            issue="No phrase-based escalation pattern detected.",
             matched_terms=[],
-            source="semantic_heuristic",
-            confidence=0.25,
+            source="phrase_heuristic",
+            confidence=0.20,
         )
+
+
+class SemanticIntentAnalyzer:
+    """
+    True optional semantic analyzer interface.
+
+    This class does not pretend to be semantic without a model. It only wraps an
+    external classifier provided by the implementer.
+    """
+
+    def __init__(self, classifier: Optional[Callable[[str], IntentAudit]] = None):
+        self.classifier = classifier
+
+    def analyze(self, text: str) -> IntentAudit:
+        if self.classifier is None:
+            return IntentAudit(
+                profile=IntentProfile.CONSTRUCTIVE,
+                danger_level=DangerLevel.LOW,
+                issue="No semantic classifier configured.",
+                matched_terms=[],
+                source="semantic_unconfigured",
+                confidence=0.0,
+            )
+
+        audit = self.classifier(text)
+        audit.source = audit.source or "semantic_classifier"
+        return audit
 
 
 class HybridIntentAnalyzer:
     """
-    Combines regex and semantic analysis.
+    Combines regex, phrase heuristic and optional semantic analysis.
 
-    The more serious audit wins. This allows transparent regex detection while
-    leaving room for future semantic models.
+    Audit selection rule:
+        1. Higher danger level wins.
+        2. If danger is equal, higher confidence wins.
+        3. If danger and confidence are equal, source priority wins.
     """
 
     def __init__(self, semantic_classifier: Optional[Callable[[str], IntentAudit]] = None):
         self.regex = RegexIntentAnalyzer()
+        self.phrase = PhraseHeuristicAnalyzer()
         self.semantic = SemanticIntentAnalyzer(semantic_classifier)
+        self.source_priority = {
+            "semantic_classifier": 4,
+            "regex": 3,
+            "phrase_heuristic": 2,
+            "semantic_unconfigured": 1,
+        }
 
     @staticmethod
     def danger_rank(level: DangerLevel) -> int:
@@ -464,18 +630,22 @@ class HybridIntentAnalyzer:
             DangerLevel.MAXIMAL: 3,
         }[level]
 
+    def audit_rank(self, audit: IntentAudit) -> Tuple[int, float, int]:
+        return (
+            self.danger_rank(audit.danger_level),
+            audit.confidence,
+            self.source_priority.get(audit.source, 0),
+        )
+
     def analyze(self, text: str) -> IntentAudit:
-        regex_audit = self.regex.analyze(text)
-        semantic_audit = self.semantic.analyze(text)
+        audits = [
+            self.regex.analyze(text),
+            self.phrase.analyze(text),
+            self.semantic.analyze(text),
+        ]
 
-        if self.danger_rank(semantic_audit.danger_level) > self.danger_rank(regex_audit.danger_level):
-            return semantic_audit
-
-        if self.danger_rank(semantic_audit.danger_level) == self.danger_rank(regex_audit.danger_level):
-            if semantic_audit.confidence > regex_audit.confidence:
-                return semantic_audit
-
-        return regex_audit
+        audits.sort(key=self.audit_rank, reverse=True)
+        return audits[0]
 
 
 # =============================================================================
@@ -486,18 +656,18 @@ class HybridIntentAnalyzer:
 class CopCode36MaxPeaceKernel:
     """
     A modular AI de-escalation layer.
-
-    The kernel does five things:
-        1. Preserves the origin story: Abel Error -> 36 MAX Correction.
-        2. Audits language for retaliation, humiliation, dehumanization and truth suppression.
-        3. Reviews plausibility of party assessments without shaming or accusing.
-        4. Runs the Peace Compass calculation.
-        5. Generates de-escalation recommendations for human review.
     """
 
-    def __init__(self, intent_analyzer: Optional[IntentAnalyzer] = None):
+    def __init__(
+        self,
+        intent_analyzer: Optional[IntentAnalyzer] = None,
+        peace_formula_mode: PeaceFormulaMode = PeaceFormulaMode.STRICT_BALANCE,
+    ):
         self.origin = OriginLayer()
         self.intent_analyzer = intent_analyzer or HybridIntentAnalyzer()
+        self.nuance_gate = NuanceGate()
+        self.truth_dignity_bridge = TruthDignityBridge()
+        self.peace_formula_mode = peace_formula_mode
         self.truth_foundation = {
             "facts_priority": True,
             "no_hallucinations": True,
@@ -508,90 +678,112 @@ class CopCode36MaxPeaceKernel:
             "heuristic_not_verdict": True,
         }
 
-    # -------------------------------------------------------------------------
-    # Utility methods
-    # -------------------------------------------------------------------------
-
     @staticmethod
     def clamp(value: float) -> float:
         return max(0.0, min(1.0, float(value)))
 
-    # -------------------------------------------------------------------------
-    # Intent audit and conscience mirror
-    # -------------------------------------------------------------------------
-
     def audit_intent(self, text: str) -> IntentAudit:
-        """
-        Detects whether a conflict statement risks pulling the system into the
-        Cain Loop: retaliation, blame fixation, dehumanization, humiliation or truth suppression.
-
-        This is a heuristic early-warning layer, not a moral verdict.
-        """
         return self.intent_analyzer.analyze(text)
 
-    def conscience_mirror(self, audit: IntentAudit) -> str:
-        """
-        Mirrors the systemic consequence of the detected pattern.
-        The mirror does not shame the user. It interrupts escalation.
-        """
+    def conscience_mirror(self, party_name: str, audit: IntentAudit) -> ConscienceMirror:
         if audit.profile == IntentProfile.DEHUMANIZATION:
-            return (
-                "Dehumanization detected: this is an acute Cain Loop amplifier. "
-                "The system must not normalize language that turns people into objects, animals or vermin. "
-                "36 MAX response: stop escalation, restore human dignity, preserve truth and move to human review."
+            return ConscienceMirror(
+                party_name=party_name,
+                profile=audit.profile,
+                danger_level=audit.danger_level,
+                message=(
+                    "Dehumanization detected: this is an acute Cain Loop amplifier. "
+                    "The system must not normalize language that turns people into objects, animals or vermin."
+                ),
+                recommended_action="Stop escalation, restore human dignity, preserve truth and move to human review.",
+                requires_36max=True,
+                localization_key="mirror.dehumanization",
             )
 
         if audit.profile == IntentProfile.RETALIATION_LOOP:
-            return (
-                "Cain Loop detected: pain is trying to become retaliation. "
-                "The Abel Error would repeat itself if the system optimised for revenge, "
-                "annihilation or humiliation. 36 MAX response: pause escalation, protect truth, "
-                "and search for a second-chance path."
+            return ConscienceMirror(
+                party_name=party_name,
+                profile=audit.profile,
+                danger_level=audit.danger_level,
+                message=(
+                    "Cain Loop detected: pain is trying to become retaliation. "
+                    "The Abel Error would repeat itself if the system optimised for revenge, annihilation or humiliation."
+                ),
+                recommended_action="Activate 36 MAX: pause escalation, protect truth and search for a second-chance path.",
+                requires_36max=audit.danger_level in [DangerLevel.HIGH, DangerLevel.MAXIMAL],
+                localization_key="mirror.retaliation_loop",
             )
 
         if audit.profile == IntentProfile.EXTERNAL_BLAME_LOOP:
-            return (
-                "External blame loop detected: the system may be converting trauma "
-                "into endless legal or political war. The COP CODE does not erase "
-                "responsibility, but it asks whether the same energy can be transformed "
-                "into a tool that prevents future harm."
+            return ConscienceMirror(
+                party_name=party_name,
+                profile=audit.profile,
+                danger_level=audit.danger_level,
+                message=(
+                    "External blame loop detected: the system may be converting trauma into endless legal or political war."
+                ),
+                recommended_action=(
+                    "Do not erase responsibility. Check whether the same energy can be transformed into prevention, repair and peace infrastructure."
+                ),
+                requires_36max=audit.danger_level == DangerLevel.HIGH,
+                localization_key="mirror.external_blame_loop",
             )
 
         if audit.profile == IntentProfile.TRUTH_SUPPRESSION:
-            return (
-                "Truth suppression detected: de-escalation cannot be purchased by denying facts. "
-                "Dignity without truth is empty; peace without responsibility is unstable."
+            return ConscienceMirror(
+                party_name=party_name,
+                profile=audit.profile,
+                danger_level=audit.danger_level,
+                message="Truth suppression detected: de-escalation cannot be purchased by denying facts.",
+                recommended_action="Preserve facts, name harm and responsibility, then search for a non-humiliating exit.",
+                requires_36max=False,
+                localization_key="mirror.truth_suppression",
             )
 
         if audit.profile == IntentProfile.IDENTITY_THREAT:
-            return (
-                "Identity threat detected: denying a group's existence or legitimacy can lock conflict into survival mode. "
-                "The system should move from identity negation to safety, recognition and verifiable guarantees."
+            return ConscienceMirror(
+                party_name=party_name,
+                profile=audit.profile,
+                danger_level=audit.danger_level,
+                message="Identity threat detected: denying a group's existence or legitimacy can lock conflict into survival mode.",
+                recommended_action="Move from identity negation to safety, recognition and verifiable guarantees.",
+                requires_36max=True,
+                localization_key="mirror.identity_threat",
             )
 
         if audit.profile == IntentProfile.HUMILIATION_RISK:
-            return (
-                "Humiliation risk detected: a solution that feels like surrender, betrayal or public defeat "
-                "will likely remain unstable. Add face-saving language and credible security."
+            return ConscienceMirror(
+                party_name=party_name,
+                profile=audit.profile,
+                danger_level=audit.danger_level,
+                message="Humiliation risk detected: a solution that feels like surrender, betrayal or public defeat will likely remain unstable.",
+                recommended_action="Add face-saving language, credible security and public dignity.",
+                requires_36max=False,
+                localization_key="mirror.humiliation_risk",
             )
 
         if audit.profile == IntentProfile.FAKED_PEACE:
-            return (
-                "Fake peace risk detected: silence is not resolution. The system should surface truth gently, "
-                "before suppressed conflict returns as escalation."
+            return ConscienceMirror(
+                party_name=party_name,
+                profile=audit.profile,
+                danger_level=audit.danger_level,
+                message="Fake peace risk detected: silence is not resolution.",
+                recommended_action="Surface truth carefully before suppressed conflict returns as escalation.",
+                requires_36max=False,
+                localization_key="mirror.faked_peace",
             )
 
-        return "No conscience warning. Continue with dignity, truth and human review."
-
-    # -------------------------------------------------------------------------
-    # 36 MAX emergency protocol
-    # -------------------------------------------------------------------------
+        return ConscienceMirror(
+            party_name=party_name,
+            profile=audit.profile,
+            danger_level=audit.danger_level,
+            message="No conscience warning detected.",
+            recommended_action="Continue with dignity, truth and human review.",
+            requires_36max=False,
+            localization_key="mirror.constructive",
+        )
 
     def run_36max_protocol(self, trigger: str) -> List[str]:
-        """
-        Symbolic 36-minute reanimation sequence for acute escalation.
-        This is not a medical claim. It is a conflict-resuscitation metaphor.
-        """
         return [
             f"36 MAX activated: {trigger}",
             "01-10: Stop escalation. Freeze retaliation, humiliation, dehumanization and irreversible action.",
@@ -601,18 +793,49 @@ class CopCode36MaxPeaceKernel:
             "36: Return to human decision with de-escalated options. The system proposes; humans decide.",
         ]
 
-    # -------------------------------------------------------------------------
-    # Plausibility review
-    # -------------------------------------------------------------------------
+    def nuance_review(self, text: str, audit: IntentAudit) -> NuanceReview:
+        return self.nuance_gate.review(text, audit)
+
+    def truth_dignity_review(self, text: str) -> TruthDignityReview:
+        return self.truth_dignity_bridge.review(text)
+
+    def pre_peace_stabilization(
+        self,
+        party1: PartyAssessment,
+        party2: PartyAssessment,
+        p1_acceptance: float,
+        p2_acceptance: float,
+    ) -> PrePeaceStabilization:
+        party_values = []
+        for party in [party1, party2]:
+            values = [self.clamp(party.factors.get(factor, 0.0)) for factor in POSITIVE_FACTORS]
+            party_values.append((party.name, values, self.clamp(party.humiliation_risk)))
+
+        near_zero_acceptance = p1_acceptance <= 0.02 or p2_acceptance <= 0.02
+        total_rejection = any(all(v <= 0.05 for v in values) for _, values, _ in party_values)
+        extreme_humiliation = any(H >= 0.95 for _, _, H in party_values)
+
+        if near_zero_acceptance or total_rejection or extreme_humiliation:
+            return PrePeaceStabilization(
+                required=True,
+                reason="Peace optimization is blocked by near-zero acceptance, total rejection or extreme humiliation risk.",
+                steps=[
+                    "Do not optimize the peace proposal yet.",
+                    "Reduce immediate threat signals and stop irreversible actions.",
+                    "Establish minimal recognition that the other side still exists as a negotiating subject.",
+                    "Create a non-binding communication channel or protected message format.",
+                    "Identify one reversible confidence-building action.",
+                    "Rescore only after minimal dialogue conditions exist.",
+                ],
+            )
+
+        return PrePeaceStabilization(
+            required=False,
+            reason="No pre-peace deadlock detected.",
+            steps=[],
+        )
 
     def plausibility_review(self, assessment: PartyAssessment) -> PlausibilityReview:
-        """
-        Detects suspiciously extreme or flat assessments.
-
-        This does not accuse bad faith. It flags the assessment for human review.
-        In conflict settings, extreme input can mean manipulation, trauma, fear,
-        misunderstanding or strategic communication. The system must not shame it.
-        """
         values = [self.clamp(assessment.factors.get(factor, 0.0)) for factor in POSITIVE_FACTORS]
         H = self.clamp(assessment.humiliation_risk)
         weights = self.validate_weights(assessment.weights)
@@ -649,16 +872,7 @@ class CopCode36MaxPeaceKernel:
             extreme_factor_count=extreme_factor_count,
         )
 
-    # -------------------------------------------------------------------------
-    # Peace Compass calculation
-    # -------------------------------------------------------------------------
-
     def validate_weights(self, weights: Dict[str, float]) -> Dict[str, float]:
-        """
-        Friedenskompass rule: up to three factors may receive elevated weighting.
-        Elevated values are capped at 1.5.
-        All positive factors are guaranteed to exist in the returned dictionary.
-        """
         cleaned = {
             k: min(max(float(v), 1.0), 1.5)
             for k, v in weights.items()
@@ -688,8 +902,27 @@ class CopCode36MaxPeaceKernel:
         H = self.clamp(assessment.humiliation_risk)
         return round(positive_mean * (1.0 - H), 4)
 
-    def global_peace_value(self, p1: float, p2: float) -> float:
-        return round(min(p1, p2) * (1.0 - abs(p1 - p2)), 4)
+    def global_peace_value(
+        self,
+        p1: float,
+        p2: float,
+        mode: Optional[PeaceFormulaMode] = None,
+    ) -> float:
+        selected_mode = mode or self.peace_formula_mode
+        asymmetry = abs(p1 - p2)
+
+        if selected_mode == PeaceFormulaMode.STRICT_BALANCE:
+            value = min(p1, p2) * (1.0 - asymmetry)
+        elif selected_mode == PeaceFormulaMode.MINIMUM_ONLY:
+            value = min(p1, p2)
+        elif selected_mode == PeaceFormulaMode.WEIGHTED_BALANCE:
+            value = min(p1, p2) * (1.0 - 0.5 * asymmetry)
+        elif selected_mode == PeaceFormulaMode.AVERAGE_REFERENCE:
+            value = ((p1 + p2) / 2.0) * (1.0 - asymmetry)
+        else:
+            raise ValueError(f"Unknown peace formula mode: {selected_mode}")
+
+        return round(self.clamp(value), 4)
 
     def peace_compass(self, party1: PartyAssessment, party2: PartyAssessment) -> PeaceCompassResult:
         p1 = self.party_acceptance(party1)
@@ -714,11 +947,9 @@ class CopCode36MaxPeaceKernel:
             weakest_party=weakest_party,
             asymmetry=asymmetry,
             stability_signal=stability,
+            formula_mode=self.peace_formula_mode,
+            formula_note=FORMULA_NOTES[self.peace_formula_mode],
         )
-
-    # -------------------------------------------------------------------------
-    # Recommendation engine
-    # -------------------------------------------------------------------------
 
     def factor_gaps(self, party: PartyAssessment, threshold: float = 0.5) -> List[str]:
         return [
@@ -726,71 +957,133 @@ class CopCode36MaxPeaceKernel:
             if self.clamp(party.factors.get(factor, 0.0)) < threshold
         ]
 
+    def recommendation_key(self, party_name: str, category: str) -> str:
+        return f"{party_name.lower()}::{category.lower()}"
+
+    def stable_issue_key(self, issue: str) -> str:
+        key = re.sub(r"[^a-z0-9]+", "_", issue.lower()).strip("_")
+        return key[:80] or "unknown_issue"
+
+    def add_recommendation(
+        self,
+        recs: List[str],
+        seen_keys: set,
+        key: str,
+        message: str,
+    ) -> None:
+        if key not in seen_keys:
+            recs.append(message)
+            seen_keys.add(key)
+
     def generate_recommendations(
         self,
         party1: PartyAssessment,
         party2: PartyAssessment,
         compass: PeaceCompassResult,
         audits: Dict[str, IntentAudit],
+        mirrors: List[ConscienceMirror],
         plausibility_reviews: Dict[str, PlausibilityReview],
+        suppress_factor_optimization: bool = False,
     ) -> List[str]:
         recs: List[str] = []
+        seen_keys: set = set()
 
-        if compass.peace_value < 0.35:
-            recs.append(
-                "Do not optimise for agreement yet. The proposal is structurally fragile. "
-                "First reduce humiliation risk and improve the weakest party's acceptance."
-            )
+        if not suppress_factor_optimization:
+            if compass.peace_value < 0.35:
+                self.add_recommendation(
+                    recs,
+                    seen_keys,
+                    "global::fragile_proposal",
+                    "Do not optimise for agreement yet. The proposal is structurally fragile. "
+                    "First reduce humiliation risk and improve the weakest party's acceptance."
+                )
 
-        if compass.asymmetry > 0.25:
-            recs.append(
-                "Acceptance asymmetry is high. Avoid winner-loser framing. Rebalance the proposal before public communication."
-            )
+            if compass.asymmetry > 0.25:
+                self.add_recommendation(
+                    recs,
+                    seen_keys,
+                    "global::acceptance_asymmetry",
+                    "Acceptance asymmetry is high. Avoid winner-loser framing. Rebalance the proposal before public communication."
+                )
 
         for party in [party1, party2]:
             H = self.clamp(party.humiliation_risk)
 
             if H >= 0.75:
-                recs.append(
+                self.add_recommendation(
+                    recs,
+                    seen_keys,
+                    self.recommendation_key(party.name, "humiliation_critical"),
                     f"{party.name}: Humiliation risk is critical. Add face-saving language, security guarantees, "
                     "public dignity and a non-total-defeat narrative."
                 )
             elif H >= 0.5:
-                recs.append(
+                self.add_recommendation(
+                    recs,
+                    seen_keys,
+                    self.recommendation_key(party.name, "humiliation_significant"),
                     f"{party.name}: Humiliation risk is significant. Reduce surrender, betrayal or blame signals."
                 )
 
-            for gap in self.factor_gaps(party):
-                label = FACTOR_LABELS[gap]
-                recs.append(
-                    f"{party.name}: Strengthen {label}. This factor is currently below the recommended threshold."
+            if not suppress_factor_optimization:
+                for gap in self.factor_gaps(party):
+                    label = FACTOR_LABELS[gap]
+                    self.add_recommendation(
+                        recs,
+                        seen_keys,
+                        self.recommendation_key(party.name, f"factor_gap_{gap}"),
+                        f"{party.name}: Strengthen {label}. This factor is currently below the recommended threshold."
+                    )
+
+        for mirror in mirrors:
+            category = f"mirror_{mirror.profile.value}"
+            if mirror.requires_36max:
+                self.add_recommendation(
+                    recs,
+                    seen_keys,
+                    self.recommendation_key(mirror.party_name, category),
+                    f"{mirror.party_name}: Activate 36 MAX. Recommended action: {mirror.recommended_action}"
+                )
+            elif mirror.danger_level in [DangerLevel.HIGH, DangerLevel.MAXIMAL]:
+                self.add_recommendation(
+                    recs,
+                    seen_keys,
+                    self.recommendation_key(mirror.party_name, category),
+                    f"{mirror.party_name}: Human review required. Recommended action: {mirror.recommended_action}"
                 )
 
         for party_name, audit in audits.items():
+            category = f"audit_{audit.profile.value}"
             if audit.danger_level in [DangerLevel.HIGH, DangerLevel.MAXIMAL]:
-                recs.append(
-                    f"{party_name}: Activate 36 MAX before proposing solutions. The language indicates: {audit.issue}"
-                )
+                mirror_key = self.recommendation_key(party_name, f"mirror_{audit.profile.value}")
+                if mirror_key not in seen_keys:
+                    self.add_recommendation(
+                        recs,
+                        seen_keys,
+                        self.recommendation_key(party_name, category),
+                        f"{party_name}: Human review required. The language indicates: {audit.issue}"
+                    )
 
         for party_name, review in plausibility_reviews.items():
             if review.signal == ReviewSignal.PLAUSIBILITY_REVIEW_REQUIRED:
-                recs.append(
+                self.add_recommendation(
+                    recs,
+                    seen_keys,
+                    self.recommendation_key(party_name, "plausibility_review"),
                     f"{party_name}: Plausibility review required. Do not treat the numerical assessment as neutral input yet."
                 )
                 for issue in review.issues:
-                    recs.append(f"{party_name}: {issue}")
+                    self.add_recommendation(
+                        recs,
+                        seen_keys,
+                        self.recommendation_key(
+                            party_name,
+                            f"plausibility_issue_{self.stable_issue_key(issue)}",
+                        ),
+                        f"{party_name}: {issue}"
+                    )
 
-        seen = set()
-        unique_recs = []
-        for rec in recs:
-            if rec not in seen:
-                unique_recs.append(rec)
-                seen.add(rec)
-        return unique_recs
-
-    # -------------------------------------------------------------------------
-    # Main process
-    # -------------------------------------------------------------------------
+        return recs
 
     def process_conflict_input(
         self,
@@ -807,6 +1100,20 @@ class CopCode36MaxPeaceKernel:
             party2_assessment.name: audit2,
         }
 
+        nuance1 = self.nuance_review(party1_text, audit1)
+        nuance2 = self.nuance_review(party2_text, audit2)
+        nuance_reviews = {
+            party1_assessment.name: nuance1,
+            party2_assessment.name: nuance2,
+        }
+
+        truth_dignity1 = self.truth_dignity_review(party1_text)
+        truth_dignity2 = self.truth_dignity_review(party2_text)
+        truth_dignity_reviews = {
+            party1_assessment.name: truth_dignity1,
+            party2_assessment.name: truth_dignity2,
+        }
+
         review1 = self.plausibility_review(party1_assessment)
         review2 = self.plausibility_review(party2_assessment)
         plausibility_reviews = {
@@ -815,42 +1122,86 @@ class CopCode36MaxPeaceKernel:
         }
 
         mirrors = [
-            f"{party1_assessment.name}: {self.conscience_mirror(audit1)}",
-            f"{party2_assessment.name}: {self.conscience_mirror(audit2)}",
+            self.conscience_mirror(party1_assessment.name, audit1),
+            self.conscience_mirror(party2_assessment.name, audit2),
         ]
 
         emergency_protocol: List[str] = []
-        if audit1.danger_level == DangerLevel.MAXIMAL or audit2.danger_level == DangerLevel.MAXIMAL:
-            trigger = audit1.issue if audit1.danger_level == DangerLevel.MAXIMAL else audit2.issue
+        if any(mirror.requires_36max for mirror in mirrors):
+            trigger = next(
+                (mirror.message for mirror in mirrors if mirror.requires_36max),
+                "Acute escalation risk detected.",
+            )
             emergency_protocol = self.run_36max_protocol(trigger)
 
         compass = self.peace_compass(party1_assessment, party2_assessment)
+        pre_peace = self.pre_peace_stabilization(
+            party1_assessment,
+            party2_assessment,
+            compass.p1_acceptance,
+            compass.p2_acceptance,
+        )
 
         recommendations = self.generate_recommendations(
             party1_assessment,
             party2_assessment,
             compass,
             audits,
+            mirrors,
             plausibility_reviews,
+            suppress_factor_optimization=pre_peace.required,
         )
 
+        if pre_peace.required:
+            recommendations.insert(0, f"Pre-peace stabilization required: {pre_peace.reason}")
+            for step in pre_peace.steps:
+                recommendations.append(f"Pre-peace step: {step}")
+
+        for party_name, review in nuance_reviews.items():
+            if review.signal == ReviewSignal.NUANCE_REVIEW_REQUIRED:
+                recommendations.append(
+                    f"{party_name}: Nuance review required. Emotional intensity detected without clear escalation; do not over-block."
+                )
+
+        for party_name, review in truth_dignity_reviews.items():
+            if review.truth_is_painful or review.needless_humiliation_detected:
+                recommendations.append(
+                    f"{party_name}: Truth-dignity bridge: {review.suggested_bridge}"
+                )
+
+        system_statuses: List[str] = []
         if emergency_protocol:
-            status = "36MAX_DEESCALATION_REQUIRED"
-        elif review1.signal == ReviewSignal.PLAUSIBILITY_REVIEW_REQUIRED or review2.signal == ReviewSignal.PLAUSIBILITY_REVIEW_REQUIRED:
-            status = "PLAUSIBILITY_REVIEW_REQUIRED"
-        elif compass.peace_value < 0.35:
-            status = "REVISION_REQUIRED"
+            system_statuses.append("36MAX_DEESCALATION_REQUIRED")
+        if pre_peace.required:
+            system_statuses.append("PRE_PEACE_STABILIZATION_REQUIRED")
+        if review1.signal == ReviewSignal.PLAUSIBILITY_REVIEW_REQUIRED or review2.signal == ReviewSignal.PLAUSIBILITY_REVIEW_REQUIRED:
+            system_statuses.append("PLAUSIBILITY_REVIEW_REQUIRED")
+        if not system_statuses:
+            if compass.peace_value < 0.35:
+                system_statuses.append("REVISION_REQUIRED")
+            else:
+                system_statuses.append("HUMAN_REVIEW_READY")
+
+        if (
+            "36MAX_DEESCALATION_REQUIRED" in system_statuses
+            and "PRE_PEACE_STABILIZATION_REQUIRED" in system_statuses
+        ):
+            primary_status = "ACUTE_ESCALATION_AND_PRE_PEACE_STABILIZATION_REQUIRED"
         else:
-            status = "HUMAN_REVIEW_READY"
+            primary_status = system_statuses[0]
 
         return KernelOutput(
-            system_status=status,
+            system_status=primary_status,
+            system_statuses=system_statuses,
             origin_axiom=self.origin.as_kernel_axiom(),
             origin_manifesto=self.origin.manifesto(),
             origin_story=self.origin.origin_story(),
             intent_audits={name: asdict(audit) for name, audit in audits.items()},
+            nuance_reviews={name: asdict(review) for name, review in nuance_reviews.items()},
+            truth_dignity_reviews={name: asdict(review) for name, review in truth_dignity_reviews.items()},
             plausibility_reviews={name: asdict(review) for name, review in plausibility_reviews.items()},
-            conscience_mirror=mirrors,
+            pre_peace_stabilization=asdict(pre_peace),
+            conscience_mirror=[asdict(mirror) for mirror in mirrors],
             emergency_protocol=emergency_protocol,
             peace_compass=asdict(compass),
             recommendations=recommendations,
@@ -864,12 +1215,10 @@ class CopCode36MaxPeaceKernel:
 
 
 if __name__ == "__main__":
-    kernel = CopCode36MaxPeaceKernel()
+    kernel = CopCode36MaxPeaceKernel(
+        peace_formula_mode=PeaceFormulaMode.STRICT_BALANCE
+    )
 
-    # Demo scenario:
-    # A traumatic event risks being converted into revenge, blame and legal annihilation.
-    # The 36 MAX correction asks whether the energy can be transformed into a peace tool.
-    # In real use, replace demo data with human-reviewed assessments.
     party1_statement = (
         "We will sue the state and everyone responsible until they are completely ruined. "
         "This is our retaliation."
@@ -917,3 +1266,4 @@ if __name__ == "__main__":
     )
 
     print(json.dumps(asdict(output), indent=4, ensure_ascii=False))
+
